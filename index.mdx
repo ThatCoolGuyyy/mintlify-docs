@@ -5,9 +5,7 @@ description: "Structured outputs from LLMs using Pydantic models"
 
 # Instructor
 
-Instructor turns any LLM into a typed function. Define a Pydantic model, pass it to the client, and get back a validated Python object instead of a raw string.
-
-It works with OpenAI, Anthropic, Google, Mistral, Cohere, Ollama, and 15+ other providers using the same interface. Validation, retries, and streaming are built in.
+Define a Pydantic model. Pass it to Claude, GPT, Gemini, or any of 15+ supported providers. Get back a validated Python object.
 
 ```python
 import instructor
@@ -28,31 +26,31 @@ print(user)
 # User(name='Ada Lovelace', age=36)
 ```
 
-## What you'll find here
+No JSON parsing. No regex. No retry loops. Validation, retries, and streaming are built in.
+
+## Where to start
 
 <CardGroup cols={2}>
   <Card title="Getting Started" icon="rocket" href="/getting-started">
-    Install the library, set up a provider, and run your first extraction in under five minutes.
+    Install, set up a provider, and run your first extraction in five minutes.
   </Card>
   <Card title="Tutorial" icon="graduation-cap" href="/tutorial">
-    A guided walkthrough covering nested models, validation, retries, and streaming.
+    Work through nested models, validation, retries, and streaming with a real example.
   </Card>
   <Card title="How-To: FastAPI" icon="server" href="/how-to-fastapi">
-    Build a production-ready FastAPI endpoint with proper error handling and testing.
+    Build a production-ready endpoint with proper error handling and tests.
   </Card>
   <Card title="API Reference" icon="code" href="/api-reference/overview">
-    Reference documentation for the core client methods.
+    Method signatures, parameters, and runnable examples for the core API.
   </Card>
 </CardGroup>
 
 ## Who this is for
 
-This site is for Python developers building applications that need structured data from LLMs. You should be comfortable with Pydantic models and async Python. Familiarity with at least one LLM provider's SDK helps but isn't required.
+Python developers building applications that need structured data from LLMs. You should be comfortable with Pydantic models and async Python.
 
-## What Instructor handles for you
+## What Instructor handles
 
-Instructor wraps your LLM client and adds four things on top of the raw provider SDK.
+Schema enforcement turns your Pydantic model into a JSON schema the model can target. Automatic retries catch validation errors and feed them back so the model can self-correct. Streaming yields partial models as fields fill in, useful for progressive UI updates. Provider abstraction lets you swap OpenAI for Anthropic by changing one string.
 
-Schema enforcement turns your Pydantic model into a JSON schema the model can target. Automatic retries catch validation errors and feed them back to the model with context so it can self-correct. Streaming support lets you yield partial models as fields fill in, useful for showing progressive UI updates. Provider abstraction means you can swap OpenAI for Anthropic by changing one string.
-
-If you've been parsing LLM JSON output by hand, regex-matching responses, or wrapping calls in try/except blocks that retry on bad output, Instructor replaces all of that.
+If you've been parsing LLM JSON by hand, regex-matching responses, or wrapping calls in retry loops, Instructor replaces all of that.
