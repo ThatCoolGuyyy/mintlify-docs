@@ -5,9 +5,9 @@ description: "Wire Instructor into FastAPI with proper client setup, error handl
 
 # Build a production-ready FastAPI endpoint with Instructor
 
-Script-style examples work for prototypes. Production endpoints need a client that's easy to mock in tests, error handling for the ways extraction can fail, streaming that browsers can actually parse, and a way to run tests without spending API credits.
+Script examples work for prototypes. Production endpoints need a mockable client, error handling for the ways extraction can fail, streaming that browsers can parse, and tests that don't spend API credits.
 
-This page walks through all four. By the end you'll have a working endpoint that extracts structured data from text, streams partial results to the browser, retries when the model returns malformed output, and ships with tests that don't make real LLM calls.
+By the end of this page you'll have a working endpoint that handles all four.
 
 ## Prerequisites
 
@@ -40,9 +40,9 @@ project/
 
 ## Steps
 
-### Step 1: Set up the Instructor client with a lifespan handler
+### Step 1: Set up the client with a lifespan handler
 
-Module-level client instantiation works in scripts but creates problems in production. The client is built at import time, it can't be swapped in tests, and the LLM provider is locked at import.
+Module-level instantiation works in scripts but breaks in production. The client builds at import time, can't be swapped in tests, and locks you into one provider per import.
 
 Use FastAPI's lifespan handler instead.
 
@@ -77,11 +77,11 @@ def get_instructor_client(request: Request) -> AsyncInstructor:
     return request.app.state.instructor_client
 ```
 
-This gives you one client per process and a clean injection point for tests.
+One client per process, with a clean injection point for tests.
 
 ### Step 2: Define the input and output models
 
-Instructor needs a Pydantic model to know what shape to extract. Define both the request payload and the structured output.
+Instructor needs a Pydantic model to know what shape to extract.
 
 ```python title="models.py"
 from pydantic import BaseModel, Field
@@ -98,12 +98,12 @@ class Person(BaseModel):
 ```
 
 <Tip>
-The `Field` constraints on `age` are passed to the LLM as part of the schema. If the model returns an out-of-range value, Pydantic raises `ValidationError` and Instructor retries automatically.
+Field constraints on `age` are passed to the LLM as part of the schema. If the model returns an out-of-range value, Pydantic raises `ValidationError` and Instructor retries automatically.
 </Tip>
 
 ### Step 3: Build the endpoint with error handling
 
-Three failures need explicit handling. Retries exhaust when the model keeps returning malformed output, the provider can rate-limit you, and upstream API errors can surface anytime.
+Three failures need explicit handling. Retries can exhaust when the model keeps returning malformed output, the provider can rate-limit you, and upstream API errors can surface at any point.
 
 ```python title="routes.py"
 from fastapi import APIRouter, Depends, HTTPException
@@ -166,7 +166,7 @@ async def extract_person(
 Streaming lets users see results as the LLM generates them.
 
 <Warning>
-Per the WHATWG HTML Standard, every Server-Sent Event must end with two newline characters (`\n\n`). Without them, browser EventSource clients won't dispatch events. Code samples on the internet often miss this; double-check yours.
+Per the WHATWG HTML Standard, every Server-Sent Event must end with two newline characters (`\n\n`). Without them, browser EventSource clients won't dispatch events. Code samples online often miss this. Double-check yours.
 </Warning>
 
 ```python
@@ -202,11 +202,7 @@ async def extract_person_stream(
     )
 ```
 
-A few details matter here.
-
-- Every `yield` ends with `\n\n`, as the SSE spec requires.
-- `Cache-Control: no-cache` stops proxies from buffering the stream.
-- Errors use a separate `event: error` channel so clients handle them differently from data events.
+Each `yield` ends with `\n\n`, as the SSE spec requires. `Cache-Control: no-cache` stops proxies from buffering the stream. Errors use a separate `event: error` channel so clients handle them differently from data events.
 
 **Expected stream:**
 
@@ -220,7 +216,7 @@ data: {"name":"Ada Lovelace","age":36,"occupation":"Mathematician"}
 data: [DONE]
 ```
 
-### Step 5: Test the endpoint without making real LLM calls
+### Step 5: Test without making real LLM calls
 
 The dependency from Step 1 makes mocking straightforward. Override the Instructor client during tests.
 
