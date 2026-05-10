@@ -1,23 +1,19 @@
 ---
 title: "Extract structured data with Pydantic models"
-description: "A learning-oriented walkthrough of nested models, validation, retries, and streaming"
+description: "Build up from a flat model to nested types, validation, retries, and streaming"
 ---
 
 # Extract structured data with Pydantic models
 
-This tutorial teaches you how Instructor turns Pydantic models into reliable LLM extractions. You'll start with a flat model, add nested types, layer in validation, watch retries kick in when the model gets something wrong, and finish with streaming partial results.
+Start with a flat Pydantic model. Add nested types. Layer in validation. Watch retries handle bad output. Finish by streaming partial results.
 
-The example throughout is extracting structured information about a research paper from a free-text abstract. By the end you'll understand why Instructor exists and when to reach for each of its features.
+The example throughout is extracting metadata from a research paper abstract.
 
 ## Prerequisites
 
 - Completed [Getting Started](/getting-started)
-- Familiarity with Pydantic models (validators, nested types)
+- Familiarity with Pydantic models, validators, and nested types
 - An OpenAI API key set as `OPENAI_API_KEY`
-
-## What we're building
-
-A function that takes the abstract of a research paper and returns a structured object containing the title, authors, publication year, and a list of key findings. By the end it will also validate the year, retry on bad output, and stream partial results as the model generates them.
 
 ## Step 1: Start with a flat model
 
@@ -32,7 +28,7 @@ A function that takes the abstract of a research paper and returns a structured 
         year: int
     ```
   </Step>
-  <Step title="Run a basic extraction">
+  <Step title="Run the extraction">
     ```python
     import instructor
 
@@ -59,11 +55,11 @@ A function that takes the abstract of a research paper and returns a structured 
   </Step>
 </Steps>
 
-The model returned a fully validated `Paper` object. If it had returned `year: "2017"` as a string, Pydantic would have coerced it. If it had returned something genuinely wrong (`year: "seventeen"`), Pydantic would have raised `ValidationError` and Instructor would have retried.
+You got a validated `Paper` object. If the model had returned `year: "2017"` as a string, Pydantic would have coerced it. If it had returned `year: "seventeen"`, Pydantic would have raised `ValidationError` and Instructor would have retried.
 
 ## Step 2: Add nested models
 
-Real extractions need nesting. Let's split each author into a name plus an affiliation, and add a list of key findings as a separate model.
+Real extractions need nesting. Split each author into a name plus an affiliation. Add a list of key findings as a separate model.
 
 ```python
 class Author(BaseModel):
@@ -81,7 +77,7 @@ class Paper(BaseModel):
     findings: list[Finding]
 ```
 
-Instructor handles arbitrarily nested Pydantic models without extra configuration. The schema is generated recursively and the response is parsed into the full object tree.
+Instructor handles nested Pydantic models without extra configuration. The schema is generated recursively and parsed into the full object tree.
 
 ```python
 abstract = """
@@ -113,7 +109,7 @@ Jones (Google Research)
 
 ## Step 3: Add validation
 
-Pydantic validators run on every extraction. Use them to enforce real-world constraints the LLM might violate.
+Pydantic validators run on every extraction. Use them to enforce constraints the LLM might violate.
 
 ```python
 from pydantic import BaseModel, Field, field_validator
@@ -132,15 +128,15 @@ class Paper(BaseModel):
         return v
 ```
 
-If the LLM returns `year: 1850` or `year: 2099`, Pydantic raises `ValidationError`. Instructor catches it and retries with the error message included in the next prompt, so the model can correct itself.
+If the LLM returns `year: 1850` or `year: 2099`, Pydantic raises `ValidationError`. Instructor catches it and retries with the error message included in the next prompt so the model can correct itself.
 
 <Tip>
-Field constraints (`ge`, `le`, `min_length`) are passed to the LLM as part of the JSON schema. The model sees them upfront and is more likely to produce valid output on the first try. Custom validators only fire after generation and only catch what slipped through.
+Field constraints (`ge`, `le`, `min_length`) are passed to the LLM as part of the JSON schema. The model sees them upfront and produces valid output more often on the first try. Custom validators only fire after generation and catch what slipped through.
 </Tip>
 
 ## Step 4: Watch retries in action
 
-Set `max_retries` to control how many times Instructor will reask the model on validation failures.
+Set `max_retries` to control how many times Instructor will reask the model.
 
 ```python
 from instructor.exceptions import InstructorRetryException
@@ -156,10 +152,10 @@ except InstructorRetryException as e:
     print(f"Last error: {e.last_completion}")
 ```
 
-When the input has no extractable paper, every retry fails and `InstructorRetryException` fires after the third attempt. The exception includes the number of attempts and the last completion so you can debug.
+When the input has no extractable paper, every retry fails. After three attempts, `InstructorRetryException` fires with the attempt count and the last completion attached for debugging.
 
 <Warning>
-`max_retries` defaults to 0. Without explicitly setting it, Instructor raises on the first validation failure. For anything production-facing, set this to at least 2.
+`max_retries` defaults to 0. Without it, Instructor raises on the first validation failure. For anything production-facing, set this to at least 2.
 </Warning>
 
 ## Step 5: Stream partial results
@@ -186,19 +182,19 @@ title='Attention Is All You Need' authors=[Author(name='Vaswani', affiliation='G
 ...
 ```
 
-`create_partial` doesn't support `max_retries`. Validation only runs on the final complete object. If you need both streaming and retries, run `create` first to validate, then call `create_partial` for the user-facing stream.
+`create_partial` doesn't support `max_retries`. Validation only runs on the final complete object. If you need both streaming and retries, call `create` first to validate, then call `create_partial` for the user-facing stream.
 
-## What you learned
+## What you've built
 
-You can now define flat or nested Pydantic models, pass them as `response_model` to Instructor, use Field constraints to guide the model, write custom validators for constraints that don't fit Field syntax, configure retries with `max_retries`, and stream partial results with `create_partial`.
+A working extraction pipeline that handles flat and nested Pydantic models, enforces constraints with Field and custom validators, retries on failure with `max_retries`, and streams partial results with `create_partial`.
 
-## What's next
+## Where to go next
 
 <CardGroup cols={2}>
   <Card title="How-To: FastAPI endpoint" icon="server" href="/how-to-fastapi">
-    Take what you've learned and build a production endpoint with error handling, streaming, and tests.
+    Build a production endpoint with error handling, streaming, and tests.
   </Card>
   <Card title="API Reference" icon="code" href="/api-reference/overview">
-    Reference documentation for every method covered in this tutorial.
+    Method signatures and runnable examples for every method covered here.
   </Card>
 </CardGroup>
