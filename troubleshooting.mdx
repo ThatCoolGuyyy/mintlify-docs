@@ -75,11 +75,9 @@ Common errors when using Instructor and how to fix each one.
   <Accordion title="Pydantic ValidationError on nested models">
     The LLM is returning the right top-level shape but malformed nested objects.
 
-    Three things to check.
+    Simplify the nesting first. Pull out the nested model and test it alone before combining. If the nested extraction works on its own, the issue is how the model reasons about the relationship between objects, not the structure itself.
 
-    First, simplify the nesting temporarily. Pull out the nested model and test it alone before combining. If the nested extraction works on its own, the issue is how the model is reasoning about the relationship.
-
-    Second, add field descriptions. Pydantic field descriptions are passed to the LLM in the schema and dramatically improve nested extraction accuracy:
+    If that works, add field descriptions. Pydantic field descriptions are passed to the LLM in the schema and they improve nested extraction accuracy a lot:
 
     ```python
     class Author(BaseModel):
@@ -87,7 +85,7 @@ Common errors when using Instructor and how to fix each one.
         affiliation: str | None = Field(None, description="University or company, if mentioned")
     ```
 
-    Third, switch modes. For complex nested schemas, `instructor.Mode.JSON` often works better than the default tool-calling mode. Override with `instructor.from_provider("openai/gpt-4.1-mini", mode=instructor.Mode.JSON)`.
+    Still failing? Switch modes. For complex nested schemas, `instructor.Mode.JSON` often works better than the default tool-calling mode. Override with `instructor.from_provider("openai/gpt-4.1-mini", mode=instructor.Mode.JSON)`.
   </Accordion>
 
   <Accordion title="Streaming returns one giant chunk instead of partial updates">
