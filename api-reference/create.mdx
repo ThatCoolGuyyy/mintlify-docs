@@ -1,0 +1,102 @@
+---
+title: "create"
+description: "Make a request and return a validated Pydantic object"
+---
+
+# `client.create`
+
+Sends a request to the LLM and returns a Pydantic object validated against the `response_model`. Retries automatically on validation failures.
+
+## Signature
+
+```python
+client.create(
+    response_model: type[BaseModel],
+    messages: list[dict],
+    max_retries: int = 0,
+    **kwargs,
+) -> BaseModel
+```
+
+For async clients, use `await client.create(...)`.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `response_model` | `type[BaseModel]` | Yes | A Pydantic model class. The return value is an instance of this class. |
+| `messages` | `list[dict]` | Yes | List of chat messages in the format `[{"role": "user", "content": "..."}]`. |
+| `max_retries` | int | No | Number of retry attempts on validation failure. Defaults to 0 (no retries). |
+| `**kwargs` | any | No | Additional parameters forwarded to the underlying provider (e.g. `temperature`, `model`, `max_tokens`). |
+
+## Returns
+
+An instance of `response_model` with all fields populated and validated.
+
+## Example
+
+```python
+import instructor
+from pydantic import BaseModel
+
+class User(BaseModel):
+    name: str
+    age: int
+
+client = instructor.from_provider("openai/gpt-4.1-mini")
+
+user = client.create(
+    response_model=User,
+    max_retries=3,
+    messages=[{"role": "user", "content": "John Doe is 30 years old."}],
+)
+
+print(user)
+# User(name='John Doe', age=30)
+```
+
+## Async example
+
+```python
+import asyncio
+import instructor
+from pydantic import BaseModel
+
+class User(BaseModel):
+    name: str
+    age: int
+
+async def main():
+    client = instructor.from_provider("openai/gpt-4.1-mini", async_client=True)
+
+    user = await client.create(
+        response_model=User,
+        messages=[{"role": "user", "content": "John Doe is 30 years old."}],
+    )
+
+    print(user)
+
+asyncio.run(main())
+```
+
+## Retry behaviour
+
+When the model returns output that fails Pydantic validation, Instructor catches the error and re-prompts the model with the validation message attached. This gives the model a chance to self-correct.
+
+If `max_retries=0` (the default), validation failures raise immediately.
+
+If `max_retries` is exceeded, Instructor raises `InstructorRetryException`. The exception exposes:
+
+- `n_attempts`: total attempts made
+- `last_completion`: the final raw response from the provider
+- `messages`: the message history including validation errors
+
+<Warning>
+The default `max_retries` is 0. For any production code, set this explicitly to at least 2.
+</Warning>
+
+## Errors
+
+- `InstructorRetryException`: validation failed after `max_retries` attempts
+- `openai.RateLimitError` / `anthropic.RateLimitError` / etc.: provider rate limit hit
+- `openai.APIError` / `anthropic.APIError` / etc.: upstream provider error

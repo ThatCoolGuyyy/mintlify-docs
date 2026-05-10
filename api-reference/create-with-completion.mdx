@@ -1,0 +1,73 @@
+---
+title: "create_with_completion"
+description: "Get both the validated Pydantic object and the raw provider response"
+---
+
+# `client.create_with_completion`
+
+Identical to `create` but returns a tuple containing both the validated Pydantic object and the raw provider response. Use this when you need access to provider-specific metadata like token usage, finish reasons, or tool call IDs.
+
+## Signature
+
+```python
+client.create_with_completion(
+    response_model: type[BaseModel],
+    messages: list[dict],
+    max_retries: int = 0,
+    **kwargs,
+) -> tuple[BaseModel, ChatCompletion]
+```
+
+## Parameters
+
+Same as `create`. The only difference is the return type.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `response_model` | `type[BaseModel]` | Yes | Pydantic model class. |
+| `messages` | `list[dict]` | Yes | Chat messages. |
+| `max_retries` | int | No | Number of retry attempts. Defaults to 0. |
+| `**kwargs` | any | No | Additional parameters forwarded to the provider. |
+
+## Returns
+
+A tuple of `(validated_model, raw_completion)`. The raw completion is provider-specific (e.g. `openai.ChatCompletion`, `anthropic.Message`).
+
+## Example
+
+```python
+import instructor
+from pydantic import BaseModel
+
+class User(BaseModel):
+    name: str
+    age: int
+
+client = instructor.from_provider("openai/gpt-4.1-mini")
+
+user, completion = client.create_with_completion(
+    response_model=User,
+    messages=[{"role": "user", "content": "John Doe is 25."}],
+)
+
+print(user)
+# User(name='John Doe', age=25)
+
+print(completion.usage.total_tokens)
+# 47
+```
+
+## When to use this over `create`
+
+Reach for `create_with_completion` when you need:
+
+- **Token usage tracking** for cost monitoring
+- **Finish reason inspection** to detect truncation (`max_tokens` hit)
+- **Provider-specific metadata** like Anthropic's `stop_reason` or OpenAI's tool call IDs
+- **Logging the raw response** for debugging or audit trails
+
+For most cases, `create` is simpler and returns just what you need.
+
+## Errors
+
+Same as [`create`](/api-reference/create): `InstructorRetryException`, provider rate limit errors, and upstream API errors.

@@ -1,0 +1,279 @@
+---
+title: "Build a production-ready FastAPI endpoint"
+description: "Wire Instructor into FastAPI with proper client setup, error handling, streaming, and tests"
+---
+
+# Build a production-ready FastAPI endpoint with Instructor
+
+Script-style examples work for prototypes. Production endpoints need a client that's easy to mock in tests, error handling for the ways extraction can fail, streaming that browsers can actually parse, and a way to run tests without spending API credits.
+
+This page walks through all four. By the end you'll have a working endpoint that extracts structured data from text, streams partial results to the browser, retries when the model returns malformed output, and ships with tests that don't make real LLM calls.
+
+## Prerequisites
+
+- Python 3.10 or later
+- An OpenAI API key from [platform.openai.com](https://platform.openai.com)
+- Familiarity with FastAPI routes, Pydantic models, and dependency injection
+
+Install the required packages:
+
+```bash
+pip install "fastapi[standard]" "instructor[openai]" pydantic pytest httpx
+```
+
+Set your API key:
+
+```bash
+export OPENAI_API_KEY="your-key-here"
+```
+
+## Project structure
+
+```
+project/
+├── app.py
+├── dependencies.py
+├── models.py
+├── routes.py
+└── test_extract.py
+```
+
+## Steps
+
+### Step 1: Set up the Instructor client with a lifespan handler
+
+Module-level client instantiation works in scripts but creates problems in production. The client is built at import time, it can't be swapped in tests, and the LLM provider is locked at import.
+
+Use FastAPI's lifespan handler instead.
+
+```python title="app.py"
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
+
+import instructor
+from fastapi import FastAPI
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    app.state.instructor_client = instructor.from_provider(
+        "openai/gpt-4.1-mini",
+        async_client=True,
+    )
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
+```
+
+Expose the client through a dependency function so routes can request it.
+
+```python title="dependencies.py"
+from fastapi import Request
+from instructor import AsyncInstructor
+
+
+def get_instructor_client(request: Request) -> AsyncInstructor:
+    return request.app.state.instructor_client
+```
+
+This gives you one client per process and a clean injection point for tests.
+
+### Step 2: Define the input and output models
+
+Instructor needs a Pydantic model to know what shape to extract. Define both the request payload and the structured output.
+
+```python title="models.py"
+from pydantic import BaseModel, Field
+
+
+class ExtractRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=4000)
+
+
+class Person(BaseModel):
+    name: str
+    age: int = Field(..., ge=0, le=150)
+    occupation: str | None = None
+```
+
+<Tip>
+The `Field` constraints on `age` are passed to the LLM as part of the schema. If the model returns an out-of-range value, Pydantic raises `ValidationError` and Instructor retries automatically.
+</Tip>
+
+### Step 3: Build the endpoint with error handling
+
+Three failures need explicit handling. Retries exhaust when the model keeps returning malformed output, the provider can rate-limit you, and upstream API errors can surface anytime.
+
+```python title="routes.py"
+from fastapi import APIRouter, Depends, HTTPException
+from instructor import AsyncInstructor
+from instructor.exceptions import InstructorRetryException
+import openai
+
+from .dependencies import get_instructor_client
+from .models import ExtractRequest, Person
+
+router = APIRouter()
+
+
+@router.post("/extract", response_model=Person)
+async def extract_person(
+    request: ExtractRequest,
+    client: AsyncInstructor = Depends(get_instructor_client),
+) -> Person:
+    try:
+        return await client.create(
+            response_model=Person,
+            max_retries=3,
+            messages=[
+                {"role": "user", "content": f"Extract a person from: {request.text}"}
+            ],
+        )
+    except InstructorRetryException:
+        raise HTTPException(
+            status_code=422,
+            detail="The model could not extract a valid person from the input.",
+        )
+    except openai.RateLimitError:
+        raise HTTPException(status_code=429, detail="Rate limit exceeded.")
+    except openai.APIError as exc:
+        raise HTTPException(status_code=502, detail=f"Upstream LLM error: {exc}")
+```
+
+`max_retries=3` lets Instructor retry malformed responses up to three times. Each retry adds the validation error to the conversation so the model can correct itself. `InstructorRetryException` fires only after all retries fail.
+
+**Successful response:**
+
+```json
+{
+  "name": "Ada Lovelace",
+  "age": 36,
+  "occupation": "Mathematician"
+}
+```
+
+**Validation failure response:**
+
+```json
+{
+  "detail": "The model could not extract a valid person from the input."
+}
+```
+
+### Step 4: Stream partial responses correctly
+
+Streaming lets users see results as the LLM generates them.
+
+<Warning>
+Per the WHATWG HTML Standard, every Server-Sent Event must end with two newline characters (`\n\n`). Without them, browser EventSource clients won't dispatch events. Code samples on the internet often miss this; double-check yours.
+</Warning>
+
+```python
+import json
+from typing import AsyncIterable
+
+from fastapi.responses import StreamingResponse
+
+
+@router.post("/extract/stream")
+async def extract_person_stream(
+    request: ExtractRequest,
+    client: AsyncInstructor = Depends(get_instructor_client),
+) -> StreamingResponse:
+    async def generate() -> AsyncIterable[str]:
+        try:
+            people = client.create_partial(
+                response_model=Person,
+                messages=[
+                    {"role": "user", "content": f"Extract a person from: {request.text}"}
+                ],
+            )
+            async for partial in people:
+                yield f"data: {partial.model_dump_json()}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as exc:
+            yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+    )
+```
+
+A few details matter here.
+
+- Every `yield` ends with `\n\n`, as the SSE spec requires.
+- `Cache-Control: no-cache` stops proxies from buffering the stream.
+- Errors use a separate `event: error` channel so clients handle them differently from data events.
+
+**Expected stream:**
+
+```
+data: {"name":null,"age":null,"occupation":null}
+
+data: {"name":"Ada","age":null,"occupation":null}
+
+data: {"name":"Ada Lovelace","age":36,"occupation":"Mathematician"}
+
+data: [DONE]
+```
+
+### Step 5: Test the endpoint without making real LLM calls
+
+The dependency from Step 1 makes mocking straightforward. Override the Instructor client during tests.
+
+```python title="test_extract.py"
+import pytest
+from fastapi.testclient import TestClient
+from unittest.mock import AsyncMock
+
+from app import app
+from dependencies import get_instructor_client
+from models import Person
+
+
+@pytest.fixture
+def client():
+    mock_client = AsyncMock()
+    mock_client.create.return_value = Person(
+        name="Ada Lovelace",
+        age=36,
+        occupation="Mathematician",
+    )
+
+    app.dependency_overrides[get_instructor_client] = lambda: mock_client
+
+    with TestClient(app) as test_client:
+        yield test_client
+
+    app.dependency_overrides.clear()
+
+
+def test_extract_returns_person(client):
+    response = client.post("/extract", json={"text": "Ada Lovelace, 36, mathematician"})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "name": "Ada Lovelace",
+        "age": 36,
+        "occupation": "Mathematician",
+    }
+```
+
+Run the tests:
+
+```bash
+pytest -v
+```
+
+**Expected output:**
+
+```
+test_extract_returns_person PASSED                                       [100%]
+```
+
+## Troubleshooting
+
+See the [Troubleshooting page](/troubleshooting) for common errors and how to fix them.

@@ -1,0 +1,54 @@
+---
+title: "API Reference"
+description: "Reference documentation for Instructor's core client methods"
+---
+
+# API Reference
+
+This reference covers the four methods you'll use most often. Every entry includes signatures, parameters, return types, and runnable examples.
+
+All examples are verified against Instructor `1.14.5`.
+
+## Methods
+
+<CardGroup cols={2}>
+  <Card title="from_provider" icon="play" href="/api-reference/from-provider">
+    Create an Instructor client from a model string.
+  </Card>
+  <Card title="create" icon="square-check" href="/api-reference/create">
+    Make a synchronous or async request and get back a validated Pydantic object.
+  </Card>
+  <Card title="create_partial" icon="bolt" href="/api-reference/create-partial">
+    Stream partial Pydantic objects as the model generates them.
+  </Card>
+  <Card title="create_with_completion" icon="file-lines" href="/api-reference/create-with-completion">
+    Return both the validated Pydantic object and the raw provider response.
+  </Card>
+</CardGroup>
+
+## Common imports
+
+Every example assumes these imports unless stated otherwise:
+
+```python
+import instructor
+from pydantic import BaseModel
+```
+
+## Provider strings
+
+The first argument to `from_provider` follows the pattern `provider/model-id`. The supported providers are:
+
+| Provider | Example string |
+|---|---|
+| OpenAI | `openai/gpt-4.1-mini` |
+| Anthropic | `anthropic/claude-sonnet-4-6` |
+| Google GenAI | `google/gemini-1.5-pro` |
+| Vertex AI | `vertexai/gemini-1.5-pro` |
+| AWS Bedrock | `bedrock/anthropic.claude-haiku-4-5-20251001:0` |
+| Mistral | `mistral/mistral-large-latest` |
+| Cohere | `cohere/command-r-plus` |
+| Groq | `groq/llama-3.1-70b-versatile` |
+| Ollama (local) | `ollama/llama3.2` |
+
+See the [Instructor integrations page](https://python.useinstructor.com/integrations/) for the full provider list.

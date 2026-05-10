@@ -1,0 +1,104 @@
+---
+title: "Troubleshooting"
+description: "Common errors and how to fix them"
+---
+
+# Troubleshooting
+
+Common errors when using Instructor and how to fix each one.
+
+<AccordionGroup>
+  <Accordion title="InstructorRetryException after every request">
+    The model can't return JSON that matches your schema even after retries. Two common causes.
+
+    First, the model is too small for the task. Switch to a larger one. Replace `gpt-4.1-mini` with `gpt-4.1`, or `claude-haiku-4-5` with `claude-sonnet-4-6`.
+
+    Second, your schema is too strict. Loosen `Field` constraints temporarily. For example, change `age: int = Field(..., ge=18, le=65)` to `age: int = Field(..., ge=0)`, confirm extractions succeed, then tighten back to your real constraints.
+
+    Also check that `max_retries` is set. The default is 0, which means no retries. Set it to at least 2 for any real use.
+  </Accordion>
+
+  <Accordion title="AuthenticationError or 401 Unauthorized">
+    Your API key is missing, wrong, or not loaded. Run `echo $OPENAI_API_KEY` (or the equivalent for your provider) to check.
+
+    If it's empty, re-run the export command. If it has a value but you're still getting 401, log into your provider's console and confirm the key is active and hasn't been rotated.
+
+    For Instructor specifically, you can also pass the key directly to bypass environment variables: `instructor.from_provider("openai/gpt-4.1-mini", api_key="sk-...")`.
+  </Accordion>
+
+  <Accordion title="ModuleNotFoundError: No module named 'instructor'">
+    The library isn't installed in the Python environment you're running. Check which Python you're using with `which python` and make sure you installed Instructor in the same environment.
+
+    If you're using a virtual environment, activate it first, then run `pip install instructor` again.
+
+    Provider-specific extras matter too. For Anthropic you need `pip install "instructor[anthropic]"`, not just `pip install instructor`.
+  </Accordion>
+
+  <Accordion title="RateLimitError: 429 Too Many Requests">
+    You've exceeded your usage limit. On a free tier or new account this can happen quickly.
+
+    Wait a moment and try again. For production use, add retry logic with exponential backoff using `tenacity`:
+
+    ```python
+    from tenacity import retry, wait_exponential, retry_if_exception_type
+    import openai
+
+    @retry(
+        retry=retry_if_exception_type(openai.RateLimitError),
+        wait=wait_exponential(multiplier=1, min=4, max=60),
+    )
+    def safe_extract():
+        return client.create(...)
+    ```
+
+    For persistent rate limiting, request a quota increase from your provider or move to a paid tier.
+  </Accordion>
+
+  <Accordion title="Stream events don't fire in the browser">
+    Open the browser network tab and inspect the streaming response. If you see `data: {...}data: {...}` with no blank line between events, you're missing the trailing `\n\n`. The SSE spec requires two newline characters at the end of every event.
+
+    Other common causes:
+
+    - A reverse proxy is buffering the response. Add `X-Accel-Buffering: no` for nginx or `proxy_buffering off;` in your nginx config.
+    - Missing `Cache-Control: no-cache` header on the response.
+    - Browser EventSource client expects the response media type to be `text/event-stream`.
+  </Accordion>
+
+  <Accordion title="Tests still hit the real API after using dependency_overrides">
+    Two common causes.
+
+    First, you forgot to call `app.dependency_overrides.clear()` between tests, so the override leaks across test runs.
+
+    Second, the override targets a different import of the dependency function. Confirm that the `get_instructor_client` you import in your route is the exact same object you override in the fixture. Re-exports through `__init__.py` files create separate objects, and FastAPI silently ignores mismatched overrides.
+  </Accordion>
+
+  <Accordion title="Pydantic ValidationError on nested models">
+    The LLM is returning the right top-level shape but malformed nested objects.
+
+    Three things to check.
+
+    First, simplify the nesting temporarily. Pull out the nested model and test it alone before combining. If the nested extraction works on its own, the issue is how the model is reasoning about the relationship.
+
+    Second, add field descriptions. Pydantic field descriptions are passed to the LLM in the schema and dramatically improve nested extraction accuracy:
+
+    ```python
+    class Author(BaseModel):
+        name: str = Field(..., description="Full name as written in the document")
+        affiliation: str | None = Field(None, description="University or company, if mentioned")
+    ```
+
+    Third, switch modes. For complex nested schemas, `instructor.Mode.JSON` often works better than the default tool-calling mode. Override with `instructor.from_provider("openai/gpt-4.1-mini", mode=instructor.Mode.JSON)`.
+  </Accordion>
+
+  <Accordion title="Streaming returns one giant chunk instead of partial updates">
+    Two possible causes.
+
+    First, you're using `create` instead of `create_partial`. The regular `create` method returns one complete object; `create_partial` is the one that yields partial instances during streaming.
+
+    Second, the provider doesn't support streaming for the mode Instructor selected. Most providers support streaming with `Mode.TOOLS` and `Mode.JSON`. Some specialized modes (like `Mode.PARALLEL_TOOLS`) don't support streaming at all.
+  </Accordion>
+</AccordionGroup>
+
+## Still stuck?
+
+Check the [Instructor GitHub Issues](https://github.com/567-labs/instructor/issues) or join the [Instructor Discord](https://discord.gg/bD9YE9JArw) for community help.

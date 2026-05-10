@@ -1,0 +1,85 @@
+---
+title: "from_provider"
+description: "Create an Instructor client from a model string"
+---
+
+# `instructor.from_provider`
+
+Creates an Instructor-wrapped client for any supported LLM provider using a single string. This is the recommended way to initialize Instructor.
+
+## Signature
+
+```python
+instructor.from_provider(
+    model: str,
+    async_client: bool = False,
+    mode: instructor.Mode | None = None,
+    api_key: str | None = None,
+    **kwargs,
+) -> Instructor | AsyncInstructor
+```
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `model` | string | Yes | Provider and model in the format `provider/model-id` (e.g. `openai/gpt-4.1-mini`). |
+| `async_client` | bool | No | If `True`, returns an `AsyncInstructor` client. Defaults to `False`. |
+| `mode` | `instructor.Mode` | No | Override the default structured output mode (e.g. `Mode.TOOLS`, `Mode.JSON`, `Mode.RESPONSES_TOOLS`). |
+| `api_key` | string | No | API key for the provider. If omitted, Instructor reads the appropriate environment variable for the provider. |
+| `**kwargs` | any | No | Additional keyword arguments passed through to the underlying provider SDK. |
+
+## Returns
+
+- `Instructor` if `async_client=False`
+- `AsyncInstructor` if `async_client=True`
+
+## Example
+
+<Tabs>
+  <Tab title="Sync">
+    ```python
+    import instructor
+
+    client = instructor.from_provider("openai/gpt-4.1-mini")
+    ```
+  </Tab>
+  <Tab title="Async">
+    ```python
+    import instructor
+
+    client = instructor.from_provider(
+        "openai/gpt-4.1-mini",
+        async_client=True,
+    )
+    ```
+  </Tab>
+  <Tab title="With explicit API key">
+    ```python
+    import instructor
+
+    client = instructor.from_provider(
+        "anthropic/claude-sonnet-4-6",
+        api_key="sk-ant-...",
+    )
+    ```
+  </Tab>
+</Tabs>
+
+## Environment variables
+
+Without an explicit `api_key`, Instructor reads from:
+
+| Provider | Environment variable |
+|---|---|
+| OpenAI | `OPENAI_API_KEY` |
+| Anthropic | `ANTHROPIC_API_KEY` |
+| Google GenAI | `GOOGLE_API_KEY` |
+| Mistral | `MISTRAL_API_KEY` |
+| Cohere | `COHERE_API_KEY` |
+| Groq | `GROQ_API_KEY` |
+
+## Errors
+
+- `ValueError` if the provider string format is invalid
+- `ImportError` if the corresponding provider package is not installed (e.g. `pip install "instructor[anthropic]"` is required for Anthropic)

@@ -1,0 +1,162 @@
+---
+title: "Getting Started"
+description: "From zero to first extraction in under five minutes"
+---
+
+# Getting Started
+
+Five minutes from now you'll have a working Python script that extracts a structured Pydantic model from natural language using an LLM. This page covers installation, API key setup, and your first successful extraction.
+
+## Prerequisites
+
+- Python 3.9 or later
+- An API key for at least one supported provider (OpenAI, Anthropic, Google, etc.)
+- pip or another Python package manager
+
+## Step 1: Install Instructor
+
+<Steps>
+  <Step title="Install the base package">
+    ```bash
+    pip install instructor
+    ```
+  </Step>
+  <Step title="Install provider-specific extras">
+    Instructor ships separate optional dependencies for each provider. Pick the one matching your API key.
+
+    <Tabs>
+      <Tab title="OpenAI">
+        ```bash
+        pip install "instructor[openai]"
+        ```
+      </Tab>
+      <Tab title="Anthropic">
+        ```bash
+        pip install "instructor[anthropic]"
+        ```
+      </Tab>
+      <Tab title="Google">
+        ```bash
+        pip install "instructor[google-generativeai]"
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+  <Step title="Verify the install">
+    ```bash
+    python -c "import instructor; print(instructor.__version__)"
+    ```
+
+    You should see a version string. The version this site is verified against is `1.14.5`.
+  </Step>
+</Steps>
+
+## Step 2: Set your API key
+
+Store your API key as an environment variable. Don't hardcode it in your scripts.
+
+<Tabs>
+  <Tab title="OpenAI">
+    ```bash
+    export OPENAI_API_KEY="your-key-here"
+    ```
+  </Tab>
+  <Tab title="Anthropic">
+    ```bash
+    export ANTHROPIC_API_KEY="your-key-here"
+    ```
+  </Tab>
+  <Tab title="Google">
+    ```bash
+    export GOOGLE_API_KEY="your-key-here"
+    ```
+  </Tab>
+</Tabs>
+
+To persist this across terminal sessions, add the line to `~/.zshrc` or `~/.bashrc` and run `source ~/.zshrc`.
+
+## Step 3: Run your first extraction
+
+Create a file called `extract.py`:
+
+```python
+import instructor
+from pydantic import BaseModel
+
+
+class Person(BaseModel):
+    name: str
+    age: int
+    occupation: str
+
+
+client = instructor.from_provider("openai/gpt-4.1-mini")
+
+person = client.create(
+    response_model=Person,
+    messages=[
+        {
+            "role": "user",
+            "content": "Marie Curie was a 38-year-old physicist when she won her first Nobel Prize.",
+        }
+    ],
+)
+
+print(person)
+```
+
+Run it:
+
+```bash
+python extract.py
+```
+
+**Expected output:**
+
+```
+name='Marie Curie' age=38 occupation='physicist'
+```
+
+You've just extracted a validated Pydantic object from natural language. No regex, no JSON parsing, no retry logic. Instructor handled all of that.
+
+<Tip>
+Switch providers by changing one string. Replace `"openai/gpt-4.1-mini"` with `"anthropic/claude-sonnet-4-6"` and the same code runs against Anthropic instead. Make sure the matching extras package is installed and the corresponding API key is set.
+</Tip>
+
+## Step 4: Handle validation failures
+
+When an extraction fails (the model returns malformed output or violates your schema), Instructor retries automatically. Control how many times with `max_retries`:
+
+```python
+person = client.create(
+    response_model=Person,
+    max_retries=3,
+    messages=[...],
+)
+```
+
+If all retries fail, Instructor raises `InstructorRetryException`. Wrap the call in a try/except block in any real application:
+
+```python
+from instructor.exceptions import InstructorRetryException
+
+try:
+    person = client.create(
+        response_model=Person,
+        max_retries=3,
+        messages=[...],
+    )
+except InstructorRetryException as e:
+    print(f"Extraction failed after retries: {e}")
+```
+
+## What's next
+
+<CardGroup cols={2}>
+  <Card title="Tutorial: Extract structured data" icon="graduation-cap" href="/tutorial">
+    Learn nested models, validation, streaming, and the full retry mechanism.
+  </Card>
+  <Card title="How-To: FastAPI endpoint" icon="server" href="/how-to-fastapi">
+    Take what you've learned and build a production endpoint.
+  </Card>
+</CardGroup>

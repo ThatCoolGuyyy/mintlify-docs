@@ -1,0 +1,102 @@
+---
+title: "create_partial"
+description: "Stream partial Pydantic objects as the model generates them"
+---
+
+# `client.create_partial`
+
+Streams a Pydantic model as it's being generated, yielding partial instances with progressively more fields filled in. Useful for showing real-time progress in user-facing applications.
+
+## Signature
+
+```python
+client.create_partial(
+    response_model: type[BaseModel],
+    messages: list[dict],
+    **kwargs,
+) -> Iterator[BaseModel] | AsyncIterator[BaseModel]
+```
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `response_model` | `type[BaseModel]` | Yes | Pydantic model class. Each yielded value is a partial instance. |
+| `messages` | `list[dict]` | Yes | Chat messages. |
+| `**kwargs` | any | No | Additional parameters forwarded to the provider. |
+
+## Returns
+
+An iterator (or async iterator) of partial `response_model` instances. Fields not yet generated are `None`.
+
+## Example
+
+```python
+import instructor
+from pydantic import BaseModel
+
+class Person(BaseModel):
+    name: str
+    age: int
+    occupation: str
+
+client = instructor.from_provider("openai/gpt-4.1-mini")
+
+stream = client.create_partial(
+    response_model=Person,
+    messages=[{"role": "user", "content": "Marie Curie was a 38-year-old physicist."}],
+)
+
+for partial in stream:
+    print(partial)
+```
+
+**Expected output:**
+
+```
+name=None age=None occupation=None
+name='Marie' age=None occupation=None
+name='Marie Curie' age=None occupation=None
+name='Marie Curie' age=38 occupation=None
+name='Marie Curie' age=38 occupation='physicist'
+```
+
+## Async example
+
+```python
+import asyncio
+import instructor
+from pydantic import BaseModel
+
+class Person(BaseModel):
+    name: str
+    age: int
+
+async def main():
+    client = instructor.from_provider("openai/gpt-4.1-mini", async_client=True)
+
+    stream = client.create_partial(
+        response_model=Person,
+        messages=[{"role": "user", "content": "Marie Curie, 38."}],
+    )
+
+    async for partial in stream:
+        print(partial)
+
+asyncio.run(main())
+```
+
+## Important behaviour
+
+- **No retries.** `create_partial` doesn't support `max_retries`. Validation only runs on the complete final object. If validation fails, the iterator raises during the final iteration.
+- **Optional types fill incrementally.** Fields appear as `None` until the model generates them, then update on each yield.
+- **Nested models build up.** Lists and nested objects appear partially-filled (e.g. a list with one item, then two, then three) as the model produces them.
+
+<Warning>
+If you need both retries and streaming, call `create` first to validate, then call `create_partial` for the user-facing stream. Don't rely on `create_partial` for validation enforcement.
+</Warning>
+
+## Errors
+
+- `pydantic.ValidationError` on the final iteration if the complete object fails validation
+- Provider errors (rate limits, API errors) raise immediately when the stream starts
