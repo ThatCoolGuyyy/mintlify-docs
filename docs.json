@@ -39,6 +39,15 @@
             "pages": ["troubleshooting"]
           }
         ]
+      },
+      {
+        "tab": "Changelog",
+        "groups": [
+          {
+            "group": "Releases",
+            "pages": ["changelog/overview"]
+          }
+        ]
       }
     ]
   }
