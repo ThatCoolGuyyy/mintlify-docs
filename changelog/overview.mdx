@@ -1,0 +1,25 @@
+---
+title: "Changelog"
+description: "What shipped in Instructor"
+---
+
+Updates to Instructor, organized by week. For installation and usage, see [Getting started](/getting-started).
+
+<Update label="May 22, 2026">
+  ## Streaming, Bedrock retries, and safer debug logs
+
+  ### New
+
+  - **Forward reasoning events from streaming partials.** `create_partial` now accepts an `on_event` callback in `Mode.RESPONSES_TOOLS`, so OpenAI reasoning summary deltas are surfaced to your code instead of being silently dropped. Useful for showing model "thinking" alongside a [streaming partial extraction](/api-reference/create-partial). Sync and async callbacks are both supported.
+
+  ### Updated
+
+  - **v2 provider runtime is now the default behind `from_provider`.** Provider dispatch was rewritten around a unified mode registry covering OpenAI, Anthropic, Google GenAI, Cohere, Mistral, xAI, Groq, Fireworks, Cerebras, Writer, and Bedrock. Type inference for sync and async clients, partial models, and parallel-tool calls is now more precise — your editor should show better autocompletion and fewer false positives. No code changes required; see [`from_provider`](/api-reference/from-provider).
+  - **Bumped `litellm` upper bound to 1.83.7.** Picks up upstream security fixes. Run `pip install --upgrade instructor` to get it.
+
+  ### Fixed
+
+  - **Anthropic retries on AWS Bedrock no longer fail with HTTP 400.** Reask requests in `ANTHROPIC_TOOLS` and `ANTHROPIC_REASONING_TOOLS` modes were serializing `caller: null` on tool-use blocks returned by Bedrock, which the API rejected. Validation-driven retries now succeed end-to-end on Bedrock.
+  - **`IncompleteOutputException` is now catchable directly.** When the model truncates a response (`finish_reason=length`), `except IncompleteOutputException` works as documented — it is no longer wrapped in `InstructorRetryException`. See [Troubleshooting](/troubleshooting) for handling tips.
+  - **`api_key` no longer leaks into debug logs.** When you pass credentials directly to a provider client, `DEBUG`-level logs now redact `api_key`, `api_secret`, `authorization`, and `token` as `[redacted]`. Existing log sinks (CloudWatch, Loki, Datadog, stdout) will stop receiving raw credentials on the next request.
+</Update>
